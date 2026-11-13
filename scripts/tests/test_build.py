@@ -1071,6 +1071,24 @@ class BuildOptionTests(unittest.TestCase):
         self.assertIn("CONFIG_WAKE_WORD_DISABLED=y", options)
         self.assertEqual(symbols, ["CONFIG_WAKE_WORD_DISABLED"])
 
+    def test_custom_wake_word_selects_multinet_and_preserves_phrase(self):
+        _, options, symbols = build._wake_word_sdkconfig_options(
+            "custom:ni hao fang bao bao:你好房保保", "esp32s3"
+        )
+        assignments = build._sdkconfig_assignments(build._merge_sdkconfig_options([], options))
+        self.assertEqual(assignments["CONFIG_USE_CUSTOM_WAKE_WORD"], "y")
+        self.assertEqual(assignments["CONFIG_USE_AFE_WAKE_WORD"], "n")
+        self.assertEqual(assignments["CONFIG_CUSTOM_WAKE_WORD"], '"ni hao fang bao bao"')
+        self.assertEqual(assignments["CONFIG_CUSTOM_WAKE_WORD_DISPLAY"], '"你好房保保"')
+        self.assertIn("CONFIG_SR_MN_CN_MULTINET5_RECOGNITION_QUANT8", symbols)
+        for value, target in (
+            ("custom:ni hao:你好", "esp32c3"),
+            ("custom:ni hao", "esp32s3"),
+            ("custom:ni hao:你好\nCONFIG_OTHER=y", "esp32s3"),
+        ):
+            with self.subTest(value=value, target=target), self.assertRaises(ValueError):
+                build._wake_word_sdkconfig_options(value, target)
+
     def test_incompatible_wake_word_model_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "WakeNet9s"):
             build._wake_word_sdkconfig_options(
@@ -1577,7 +1595,16 @@ class LanguageBuildTests(unittest.TestCase):
                         )
                         validate.assert_any_call([expected.split("=", 1)[0]], "--language")
                         models = [item for item in fragment if item.startswith("CONFIG_SR_WN_")]
-                        if variant["wake_word_supported"]:
+                        board_config = json.loads(
+                            (ROOT / "main/boards" / variant["board"] / "config.json").read_text(encoding="utf-8")
+                        )
+                        preset = next(item for item in board_config["builds"] if item["name"] == variant["name"])
+                        if preset.get("wake_word", "").startswith("custom:"):
+                            self.assertEqual(models, [])
+                            self.assertIn("CONFIG_USE_CUSTOM_WAKE_WORD=y", fragment)
+                            display = preset["wake_word"].split(":", 2)[2]
+                            self.assertIn(f'CONFIG_CUSTOM_WAKE_WORD_DISPLAY="{display}"', fragment)
+                        elif variant["wake_word_supported"]:
                             chinese = language in {"zh-CN", "zh-TW"}
                             if target in {"esp32c3", "esp32c5", "esp32c6"}:
                                 model = "WN9S_NIHAOXIAOZHI" if chinese else "WN9S_HIESP"

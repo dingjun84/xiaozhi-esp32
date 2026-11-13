@@ -349,6 +349,28 @@ def _wake_word_sdkconfig_options(
         "CONFIG_USE_CUSTOM_WAKE_WORD=n",
     ]
 
+    if wake_word.startswith("custom:"):
+        parts = wake_word.split(":", 2)
+        if len(parts) != 3 or not re.fullmatch(r"[a-z]+(?: [a-z]+)*", parts[1]):
+            raise ValueError("Custom wake word must be custom:<space-separated pinyin>:<display text>")
+        phrase, display = parts[1:]
+        if not display.strip() or any(char in display for char in '\r\n"\\'):
+            raise ValueError("Custom wake-word display text is empty or contains invalid characters")
+        if target != "esp32s3":
+            raise ValueError("The custom MultiNet5 profile currently supports esp32s3 only")
+        options.extend([
+            "CONFIG_USE_CUSTOM_WAKE_WORD=y",
+            "CONFIG_SR_MN_CN_NONE=n",
+            "CONFIG_SR_MN_CN_MULTINET5_RECOGNITION_QUANT8=y",
+            f'CONFIG_CUSTOM_WAKE_WORD="{phrase}"',
+            f'CONFIG_CUSTOM_WAKE_WORD_DISPLAY="{display}"',
+            "CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=20",
+        ])
+        return wake_word, options, [
+            "CONFIG_USE_CUSTOM_WAKE_WORD",
+            "CONFIG_SR_MN_CN_MULTINET5_RECOGNITION_QUANT8",
+        ]
+
     if normalized == "disabled":
         options.append("CONFIG_WAKE_WORD_DISABLED=y")
         return normalized, options, ["CONFIG_WAKE_WORD_DISABLED"]
@@ -1622,7 +1644,7 @@ def build_board(
             ([option.split("=", 1)[0]], "--language")
         )
         wake_word_supported = _board_supports_wake_word(target, sdkconfig_append)
-        requested_wake_word = wake_word
+        requested_wake_word = wake_word if wake_word is not None else build.get("wake_word")
         if requested_wake_word is None:
             requested_wake_word = "disabled"
             if wake_word_supported:
@@ -1791,6 +1813,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         metavar="MODEL",
         help=(
             "Wake-word model (for example wn9_jarvis_tts), "
+            "'custom:<space-separated pinyin>:<display text>' (ESP32-S3), "
             "'nihaoxiaozhi', 'hiesp', or 'disabled'. Defaults to nihaoxiaozhi "
             "for zh-CN/zh-TW and hiesp otherwise; disabled on unsupported boards"
         ),

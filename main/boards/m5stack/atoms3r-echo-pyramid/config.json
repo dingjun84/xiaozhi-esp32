@@ -10,6 +10,16 @@
                 "CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y",
                 "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/8m.csv\""
             ]
+        },
+        {
+            "name": "atoms3r-echo-pyramid-fangbaobao",
+            "wake_word": "custom:ni hao fang bao bao:你好房保保",
+            "sdkconfig_append": [
+                "CONFIG_BOARD_TYPE_M5STACK_ATOM_S3R_ECHO_PYRAMID=y",
+                "CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y",
+                "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/8m_multinet.csv\"",
+                "CONFIG_OTA_URL=\"https://agent.fangbaobaochina.com/xiaozhi/ota/\""
+            ]
         }
     ]
 }
